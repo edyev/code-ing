@@ -193,13 +193,13 @@ uint8_t BG96_SocketInit(USART_Type* base, socket_cfg* cfg){
 	sprintf(aux, "%d", cfg->access);
 	strcat(cmd,aux);
 	strcat(cmd, "\r");
-	/*Send command without deinitializing*/
+	/*Send command without deinitializing so we can receive responses*/
 	BG96_SendCmd(base, cmd, 101, ',');
 	/*Store response, which include error flag*/
 	BG96_Store(base, resp_code, ':', '\r', 10000000);
-	for(uint8_t i = 0; i < strlen(aux); i++)
+	for(uint8_t i = 0; i < sizeof(aux); i++)
 		aux[i] = 0;
-	for(uint8_t i = 0; i < strlen(resp_code); i++){
+	for(uint8_t i = 0; i < sizeof(resp_code); i++){
 		if(err)
 			aux[count++] = resp_code[i];
 		if(resp_code[i] == ',')
