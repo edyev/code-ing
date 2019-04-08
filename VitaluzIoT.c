@@ -24,13 +24,13 @@ uint8_t VitaluzIoT_Send(package* payload, pdp_cfg* pdp, socket_cfg* socket){
 	parse_package(payload, f_buff); //to save data todo:uncomment in final ASAP!!
 	//f_buff[0] = '1';//todo:delete after testing only for saving data
 	strcat(json, f_buff);
-	strcat(json, "\",\"t\":\"TOPIC1\"}");
+	strcat(json, "\",\"t\":\"REPORTE\"}");
 
-	uint8_t uh = BG96_SocketInit(BG_UART, socket);
+	uint8_t err = BG96_SocketInit(BG_UART, socket);
 	BG96_SendData(BG_UART, socket, json);
 	BG96_SocketClose(BG_UART, socket);
 	//BG96_PDPDeinit(BG_UART, &pdp);
-	return 0;
+	return err;
 }
 
 uint8_t VitaluzIoT_Write(uint8_t outputs, Pin* r1, Pin* r2, Pin* v){
@@ -73,7 +73,7 @@ uint8_t VitaluzIoT_ListenEnable(pdp_cfg* pdp, socket_cfg* socket){
 	//BG96_PDPInit(BG_UART, &pdp);//we are using a global pdp init which works fine
 	uint8_t err = BG96_SocketInit(BG_UART, socket);
 	BG96_Listen(BG_UART);
-	return 0;
+	return err;
 }
 
 void VitaluzIoT_Deafen(pdp_cfg* pdp, socket_cfg* socket){
@@ -172,10 +172,10 @@ void parse_package(package* payload, char* str){
 	for(uint8_t i = 0; i < strlen(str); i++)
 		str[i] = 0;
 	strcat(str,"t:");
-	float2str(payload->temperature, aux_buff, 3);
+	float2str(payload->temperature, aux_buff, 2);
 	strcat(str, aux_buff);
 	strcat(str, ",v:");
-	float2str(payload->volume, f_buff, 3);
+	float2str(payload->volume, f_buff, 2);
 	strcat(str, f_buff);
 	strcat(str, ",i:");
 	itoa(payload->inputs, aux_buff,10);
@@ -194,25 +194,25 @@ void parse_package(package* payload, char* str){
 uint8_t VitaluzIoT_Receive(pdp_cfg* pdp, socket_cfg* incoming_socket){
 	uint8_t data[100] = {0}, incoming_cmd[4] = {0} ;
 	/*If function returns with 0xFF code it means it timed out*/
-	if(BG96_StoreTimeout(BG_UART, data,',',  45, 3000000) == 255){
+	if(BG96_StoreTimeout(BG_UART, (void*)data,',',  45, 3000000) == 255){
 		USART_Deinit(BG_UART);
 		return 255;
 	}
 
 	 /*Parse socket id to integer*/
 	 if(data[1] == ',')
-		 for(uint8_t i = strlen(data); i > 0 ; i--)
+		 for(uint8_t i = strlen((char*)data); i > 0 ; i--)
 			 data[i] = 0;
 	 else if(data[2] == ',')
-		 for(uint8_t i = strlen(data); i > 1 ; i--)
+		 for(uint8_t i = strlen((char*)data); i > 1 ; i--)
 			 data[i] = 0;
 	 else{
 
-	     for(uint8_t i = 0; i < strlen(data); i++)
+	     for(uint8_t i = 0; i < strlen((char*)data); i++)
 	    	 data[i] = 0;
 	     return 10; //todo: create enum error
 	 }
-	 incoming_socket->id = (uint8_t)strtol(data, NULL, 10);
+	 incoming_socket->id = (uint8_t)strtol((char*)data, NULL, 10);
 	 char cmd[17] = {0};
 	 char aux[2] = {0};
 	 /*Command to fetch data received via socket*/
@@ -223,10 +223,10 @@ uint8_t VitaluzIoT_Receive(pdp_cfg* pdp, socket_cfg* incoming_socket){
 	 /*Sends command without changing uart initialization*/
 	 BG96_SendCmd(BG_UART, cmd, no_init ,0 );
 	 /*rx_buffer reset*/
-	 for(uint8_t i = 0; i < strlen(data); i++){
+	 for(uint8_t i = 0; i < strlen((char*)data); i++){
 		 data[i] = 0;
 	 }
-	 BG96_Store(BG_UART, incoming_cmd, '[', ']', 3000000); //todo: consider adding another arg to force function to return after n chars
+	 BG96_Store(BG_UART, (char*)incoming_cmd, '[', ']', 3000000); //todo: consider adding another arg to force function to return after n chars
 	 /* Important!! ~700ms pause required before closing socket.*/
      halt(700000);
 	 /*Close socket command. Closing incoming_socket avoids*/
@@ -235,10 +235,9 @@ uint8_t VitaluzIoT_Receive(pdp_cfg* pdp, socket_cfg* incoming_socket){
 	 strcat(cmd2, "AT+QICLOSE=");
 	 strcat(cmd2, aux);
 	 strcat(cmd2, "\r");
-	 USART_Write(BG_UART, cmd2);
-	 uint16_t bla ;
+	 USART_Write(BG_UART, (uint8_t*)cmd2);
 	 BG96_StoreAfter(BG_UART,  cmd2, '\n',  1);
-
+	 return 0;
 
 }
 
@@ -248,7 +247,7 @@ void VitaluzIoT_RefreshServer(pdp_cfg* pdp, socket_cfg* server){
 	 sprintf(aux, "%d", server->id);
 	 strcat(cmd2, aux);
 	 strcat(cmd2, "\r");
-	 USART_Write(BG_UART, cmd2);
+	 USART_Write(BG_UART, (uint8_t*)cmd2);
 	 BG96_StoreAfter(BG_UART,  cmd2, '\n',  1);
 	 USART_Deinit(BG_UART);
 	 halt(200000);
@@ -256,7 +255,19 @@ void VitaluzIoT_RefreshServer(pdp_cfg* pdp, socket_cfg* server){
 }
 
 
+void VitaluzIoT_Alarm( pdp_cfg* pdp, socket_cfg* socket){
+	char json[150] = "{\"k\":\"";
 
+	strcat(json, DEVICE_KEY);
+	strcat(json, "\", \"d\":\"");
+	strcat(json, "!");
+	strcat(json, "\",\"t\":\"ALARMA\"}");
+
+	BG96_SocketInit(BG_UART, socket);
+	BG96_SendData(BG_UART, socket, json);
+	BG96_SocketClose(BG_UART, socket);
+
+}
 
 
 
